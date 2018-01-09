@@ -1,0 +1,16 @@
+Sniff.py fonctionne avec le module de demo JN-AN-1172-JN516x-Customer-Module-Evaluation-Tool/AN1172_CustomerModuleEvalTool modifié.
+
+le module EvalTool qui tourne sur le JN5168 attend en ligne de commande sur le port com pour executer les tests.
+
+On peut s'y connecter avec le soft TeraTerm par exemple. COMx, 38400 8n1 No Flow control.
+
+Pour récupérer les trames pour wireshark il faut aller dans le menu 
+	Standart Module -> a 
+	2.5dB Attenuateur Off -> a
+	Receive Packet Test -> h
+	Choice the channel with + or -
+	Channel 20 pour Ikea
+	
+On se deconnect de TeraTerm, file disconnet
+	
+then start python Sniff.py 
