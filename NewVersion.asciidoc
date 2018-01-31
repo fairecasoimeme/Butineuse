@@ -18,3 +18,6 @@ TOOL_COMMON_BASE_DIR= C:\NXP\bstudio_nxp\sdk\Tools
 create make
 
 compilation
+
+
+Dans le firmware: #define STARTUP_CHANNEL			20
