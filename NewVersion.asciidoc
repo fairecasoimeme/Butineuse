@@ -8,6 +8,13 @@ start NXP Studio
 
 Create a generique project
 
+Modify makfile
+# Default device type
+JENNIC_CHIP ?= JN5168
+
+#TOOL_COMMON_BASE_DIR= /usr/local
+TOOL_COMMON_BASE_DIR= C:\NXP\bstudio_nxp\sdk\Tools
+
 create make
 
 compilation
