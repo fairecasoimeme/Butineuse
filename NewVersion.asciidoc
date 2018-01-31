@@ -1,0 +1,13 @@
+= Work in progress
+
+Jerome-PS evolution
+
+git clone xxxx JN516xSniffer
+
+start NXP Studio
+
+Create a generique project
+
+create make
+
+compilation
