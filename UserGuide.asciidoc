@@ -5,7 +5,8 @@
 
 - Ouvrir un terminal
 
-- identifier le port sur lequel le JN516x est connecté, dans cette doc je prendrai /dev/ttyUSB0 pour le port principal et /dev/ttyUSB1 pour le port de debug
+- identifier le port sur lequel le JN516x est connecté, dans cette doc je prendrai /dev/ttyUSB0 pour le port principal et /dev/ttyUSB1 pour le port de debug.
+* pour ce faire, faites un ls -l /dev/ttyUSB*, brancher le port principal, faites de nouveau un ls -l /dev/ttyUSB*, comparez, un nouveau port doit apparaitre. Idem pour le port de debug.
 
 * stty -F /dev/ttyUSB0 115200 raw
 * stty -F /dev/ttyUSB0 -echo
