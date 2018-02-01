@@ -5,20 +5,53 @@
 
 - Ouvrir un terminal
 
-- identifier le port sur lequel le JN516x est connecté, dans cette doc je prendrai /dev/ttyUSB0 pour le port principal et /dev/ttyUSB1 pour le port de debug.
+- identifier le port sur lequel le JN516x est connecté
+
+* dans cette doc je prendrai /dev/ttyUSB0 pour le port principal et /dev/ttyUSB1 pour le port de debug.
 * pour ce faire, faites un ls -l /dev/ttyUSB*, brancher le port principal, faites de nouveau un ls -l /dev/ttyUSB*, comparez, un nouveau port doit apparaitre. Idem pour le port de debug.
 
+- Configurez le port principal
 * stty -F /dev/ttyUSB0 115200 raw
 * stty -F /dev/ttyUSB0 -echo
+
+- Mettez le fifo en place pour wireshark
 * cd Butineuse
 * rm /tmp/sharkfifo; mkfifo /tmp/sharkfifo; cat /dev/ttyUSB0 > /tmp/sharkfifo
 
-- Ouvrir un terminal
+- Lancez Wireshark
+* Ouvrir un terminal
 * cd Butineuse
 * wireshark -k -i /tmp/sharkfifo -X lua_script:wireshark_plugin/zb.lua
 
-Si vous voulez le debug
+- Si vous voulez le debug
 * Ouvrir un terminal
 * stty -F /dev/ttyUSB1 115200 raw
 * stty -F /dev/ttyUSB1 -echo
 * cat /dev/ttyUSB1
+
+== Lancement des opérations
+
+Vérifiez que vous avez le menu Outils->ZB.
+
+image::doc/ZB_Menu.png[]
+
+Il est important de comprendre qu'après lancement Wireshark ne sait pas quel type de data il va recevoir. De ce fait, la première action est de demander à la Butineuse de lui envoyer l'information. Pour ce faire, utiliser le menu Outils->ZB->ZB Init. Une fois que cela est éxecuté, wireshark recevra tous les paquets sous le format voulu. Vous n'avez plus à faire le "ZB Init", jusqu'a l'arrêt de wireshark.
+
+Après avoir selectionné le menu init, vous devez voir arriver un paquet indiquant le channel sur lequel vous butinez. Ici le channel 11.
+
+image::doc/ZB_Menu_Init_Retour.png[]
+
+Si vous avez ce message alors wireshark est initialisé et fait la capture. Si vous êtes sur le bon canal radio et qu'il y a du traffique vous devriez voir les paquets.
+
+Maintenant vous pouvez arrêter la capture par le menu Outils->ZB->ZB Stop. De même relancer la capture avec Outils->ZB->ZB Stop (Sans avoir arreté wireshark sinon voir menu init).
+
+Et ce qui est génial (Merci merci Jerome-PS) changer de canal juste à l'aide du menu Outils->ZB->ZB Options. Par exemple j'ai mon réseau sur le canal 20.
+
+image::doc/ZB_Menu_Options_CH20.png[]
+
+et magie ca discute ...
+
+image::doc/CaDiscute.png[]
+
+
+
