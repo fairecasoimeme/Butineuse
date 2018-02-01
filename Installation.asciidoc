@@ -1,19 +1,26 @@
 Installation
 
-== Partie Wireshark
 
-=== Sous Linux
+
+= Partie firmware sur JN5168
+
+Voir compilation et installation firmware
+
+= Branchement
+
+* branchez UART0 sur un port USB
+* branchez UART1 sur un port USB si vous avez compilé en mode debug et que vous voulez suivre les traces.
+
+= Partie Wireshark
+
+== Sous Linux
 
 * Ouvrir un terminal
 * git clone https://github.com/KiwiHC16/Butineuse.git Butineuse
 * sudo usermod -a -G dialout $USER
 * sudo usermod -a -G wireshark $USER
 
-=== Sous Windows
+== Sous Windows
 
 * work in progress
-
-== Partie firmware sur JN5168
-
-Voir compilation et installation firmware
 
