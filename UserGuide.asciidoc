@@ -16,6 +16,7 @@
 * wireshark -k -i /tmp/sharkfifo -X lua_script:wireshark_plugin/zb.lua
 
 Si vous voulez le debug
-
+* Ouvrir un terminal
 * stty -F /dev/ttyUSB1 115200 raw
 * stty -F /dev/ttyUSB1 -echo
+* cat /dev/ttyUSB1
