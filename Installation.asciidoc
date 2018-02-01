@@ -1,5 +1,7 @@
 
 == Sous Linux
-Ouvrir un terminal
-git clone https://github.com/KiwiHC16/Butineuse.git Butineuse
-cd Butineuse
+
+* Ouvrir un terminal
+* git clone https://github.com/KiwiHC16/Butineuse.git Butineuse
+* sudo usermod -a -G dialout $USER
+* sudo usermod -a -G wireshark $USER
