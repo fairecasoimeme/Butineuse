@@ -1,7 +1,15 @@
 
+= Partie Wireshark
+
 == Sous Linux
 
 * Ouvrir un terminal
 * git clone https://github.com/KiwiHC16/Butineuse.git Butineuse
 * sudo usermod -a -G dialout $USER
 * sudo usermod -a -G wireshark $USER
+
+
+= Partie firmware sur JN5168
+
+Voir compilation et installation firmware
+
