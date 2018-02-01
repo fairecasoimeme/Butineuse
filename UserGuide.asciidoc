@@ -13,7 +13,7 @@
 * cd Butineuse
 * rm /tmp/sharkfifo; mkfifo /tmp/sharkfifo; cat /dev/ttyUSB0 > /tmp/sharkfifo &
 
-* wireshark -k -i /tmp/sharkfifo -X lua_script:zb.lua
+* wireshark -k -i /tmp/sharkfifo -X lua_script:wireshark_plugin/zb.lua
 
 Si vous voulez le debug
 
