@@ -1,0 +1,19 @@
+
+= Sous Linux
+
+== Configuration initiale
+
+* Ouvrir un terminal
+
+- Donner les droits qui seront nécessaires:
+* sudo usermod -a -G dialout $USER
+* sudo usermod -a -G wireshark $USER
+
+* identifier le port sur lequel le JN516x est connecté, dans cette doc je prendrai /dev/ttyUSB0
+stty -F /dev/ttyUSB0 115200 raw
+stty -F /dev/ttyUSB0 -echo
+rm /tmp/sharkfifo; mkfifo /tmp/sharkfifo; cat /dev/ttyUSB0 > /tmp/sharkfifo &
+
+wireshark -k -i /tmp/sharkfifo -X lua_script:zb.lua
+
+
