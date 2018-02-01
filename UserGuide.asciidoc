@@ -10,6 +10,7 @@
 
 * stty -F /dev/ttyUSB0 115200 raw
 * stty -F /dev/ttyUSB0 -echo
+* cd Butineuse
 * rm /tmp/sharkfifo; mkfifo /tmp/sharkfifo; cat /dev/ttyUSB0 > /tmp/sharkfifo &
 
 * wireshark -k -i /tmp/sharkfifo -X lua_script:zb.lua
