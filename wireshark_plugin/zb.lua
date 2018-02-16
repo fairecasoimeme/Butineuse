@@ -34,6 +34,8 @@ do
 -- Dissection routine
     function p_zbparams104.dissector(buf,pkt,root)
 --		dprint("[0:2]=" .. buf(0,2):uint())
+        set_color_filter_slot(4, "zbee_zcl")                    -- Purple 2
+        set_color_filter_slot(7, "zbee_nwk.cmd.id == 0x08")		-- Green  3 - Link Status
 		if (buf:len() < 2) or (buf(0,2):uint() ~= 0x0700) then
 			orig104:call(buf,pkt,root)
 		else
@@ -44,7 +46,8 @@ do
     end
 
     function p_zbparams127.dissector(buf,pkt,root)
-
+        set_color_filter_slot(4, "zbee_zcl")                    -- Purple 2
+        set_color_filter_slot(7, "zbee_nwk.cmd.id == 0x08")		-- Green  3 - Link Status
 		if (buf:len() < 2) or (buf(0,2):uint() ~= 0x0700) then
 			orig127:call(buf,pkt,root)
 		else
@@ -175,6 +178,12 @@ do
         com:write("+LOGOFF-")
         com:close()
     end
+    local function zbSpeed1M()
+        local portname = default_settings.comport
+        local com = assert(io.open(portname, "w"))
+        com:write("+SP:1M-")
+        com:close()
+    end
 
 	register_menu("ZB/ZB Options",dialog_menu,MENU_TOOLS_UNSORTED)
 	register_menu("ZB/ZB Init",zbinit,MENU_TOOLS_UNSORTED)
@@ -183,5 +192,6 @@ do
 	register_menu("ZB/ZB Test",zbtest,MENU_TOOLS_UNSORTED)
     register_menu("ZB/ZB Log On",zblogon,MENU_TOOLS_UNSORTED)
     register_menu("ZB/ZB Log Off",zblogoff,MENU_TOOLS_UNSORTED)
+    register_menu("ZB/ZB Speed 1M",zbSpeed1M,MENU_TOOLS_UNSORTED)
 end
 
