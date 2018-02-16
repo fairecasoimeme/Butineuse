@@ -163,11 +163,25 @@ do
 		com:write("+TST-")
 		com:close()
 	end
+    local function zblogon()
+        local portname = default_settings.comport
+        local com = assert(io.open(portname, "w"))
+        com:write("+LOGON-")
+        com:close()
+    end
+    local function zblogoff()
+        local portname = default_settings.comport
+        local com = assert(io.open(portname, "w"))
+        com:write("+LOGOFF-")
+        com:close()
+    end
 
 	register_menu("ZB/ZB Options",dialog_menu,MENU_TOOLS_UNSORTED)
 	register_menu("ZB/ZB Init",zbinit,MENU_TOOLS_UNSORTED)
 	register_menu("ZB/ZB Start",zbstart,MENU_TOOLS_UNSORTED)
 	register_menu("ZB/ZB Stop",zbstop,MENU_TOOLS_UNSORTED)
 	register_menu("ZB/ZB Test",zbtest,MENU_TOOLS_UNSORTED)
+    register_menu("ZB/ZB Log On",zblogon,MENU_TOOLS_UNSORTED)
+    register_menu("ZB/ZB Log Off",zblogoff,MENU_TOOLS_UNSORTED)
 end
 
