@@ -1,11 +1,11 @@
 #include <jendefs.h>
-#include <ctype.h>
 #include <AppHardwareApi.h>
 #include <JPT.h>
 #include "Printf.h"
 #include "UartBuffered.h"
 #include "dbg_uart.h"
 #include "dbg.h"
+#include <string.h>
 
 
 /****************************************************************************/
@@ -19,7 +19,7 @@
 #define UART_DEBUGGING                                            TRUE
 #endif
 
-//#define XIAMO_SMART_BUTTON
+//#define XIAOMI_SMART_BUTTON
 
 #define UART_TO_PC              E_AHI_UART_0        /* Uart to PC           */
 
@@ -27,19 +27,21 @@
 #define BAUD_RATE               E_AHI_UART_RATE_115200 /* Baud rate to use   */
 
 
-#define STARTUP_CHANNEL			20
+#define STARTUP_CHANNEL			25
 
-#ifdef XIAMO_SMART_BUTTON
+#ifdef XIAOMI_SMART_BUTTON
 #define LED_PIN_BIT				(1 << 11)
 #define MAIN_PIN_BIT			(1 << 16)
 #define PAIR_PIN_BIT			(1 <<  0)
-#endif //def XIAMO_SMART_BUTTON
+#endif //def XIAOMI_SMART_BUTTON
 
 #define READ_REG32(A)     *(volatile uint32 *)(A)
 
 #define swap32(x)	__builtin_bswap32((x))
 //#define swap16(x)	__builtin_bswap16((x))
 #define swap16(x)	((((x) & 0xFF) << 8) | (((x) >> 8) & 0xFF))
+
+#define isdigit(x)	(((x)>='0') && ((x)<='9'))
 
 typedef struct pcap_hdr_s {
 	uint32_t magic_number;   /* magic number */
@@ -64,8 +66,10 @@ typedef struct pcaprec_hdr_s {
 /***        Local Variables                                               ***/
 /****************************************************************************/
 
-uint8 au8UartTxBuffer[100];
+uint8 au8UartTxBuffer[1024];
 uint8 au8UartRxBuffer[100];
+
+tsJPT_PT_Packet  psPacketTmp;
 
 uint32 u32RadioMode           = E_JPT_MODE_LOPOWER;
 uint32 u32ModuleRadioMode     = E_JPT_MODE_LOPOWER;
@@ -74,7 +78,10 @@ uint8 u8TxPowerAdj	  = 0;
 uint8 u8Attenuator3dB = 0;
 
 volatile uint32_t g_u32Seconds = 0;
+volatile uint32_t g_au32FallingTimes[16];
+volatile uint32_t g_u32FallingTimesWPtr = 0;
 int g_iWSDumpStatus = 0;
+int logUART = 0;  // If set to 1, then log will be sent to UART1 but packets will be dropped. Not clear yet why.
 
 const float afFrequencies[] = {
 		2.405e6,
@@ -103,6 +110,7 @@ PRIVATE char acGetC(void);
 PRIVATE void TickTimer_Cb(uint32_t u32Device, uint32_t u32ItemBitmap);
 PRIVATE void WS_init(void);
 PRIVATE void WS_Send_Chan_Num(uint8_t u8Channel);
+// PRIVATE void WS_Send_Syntax_Error(const char * pBuffer);
 PRIVATE void WS_Send_Test_Packet(void);
 PRIVATE void WS_Dump_Packet(tsJPT_PT_Packet * psPacket);
 
@@ -123,6 +131,7 @@ PUBLIC void AppColdStart(void)
 	char bCharBuffer[64] = "";
 	int iCharBufferPtr = 0;
 
+
 	/* Turn off debugger */
 	*(volatile uint32 *)0x020000a0 = 0;
 
@@ -141,14 +150,18 @@ PUBLIC void AppColdStart(void)
 	/* set up the tick timer, we'll use it for timestamps */
 	vAHI_TickTimerConfigure(E_AHI_TICK_TIMER_DISABLE);
 	vAHI_TickTimerInit((void*)TickTimer_Cb);
-	vAHI_TickTimerWrite(0x00000000);
-	vAHI_TickTimerInterval(16000000);							// 1Hz
+	vAHI_TickTimerWrite(0x00000000);					// Starting  count
+	vAHI_TickTimerInterval(16000000);					// Reference count 1Hz
 	vAHI_TickTimerIntEnable(TRUE);
 	vAHI_TickTimerConfigure(E_AHI_TICK_TIMER_RESTART);
 
+	vAHI_UartSetRTSCTS(UART_TO_PC, FALSE);
 	vUartInit(UART_TO_PC, BAUD_RATE, au8UartTxBuffer, sizeof(au8UartTxBuffer), au8UartRxBuffer, sizeof(au8UartRxBuffer));/* uart for user interface */
 
-	vInitPrintf((void*)vPutC);
+#ifdef HEARTBEAT_LED
+	vAHI_DioSetDirection(0x00000000, LED_PIN_BIT);		// Set DIO11 as output (LED)
+#endif	//def HEARTBEAT_LED
+
 
 #if  (UART_DEBUGGING == TRUE)
 	/* Send debug output to DBG_UART */
@@ -160,8 +173,8 @@ PUBLIC void AppColdStart(void)
 
 
 #ifdef XIAMO_SMART_BUTTON
+
 	vAHI_DioSetPullup(~MAIN_PIN_BIT, MAIN_PIN_BIT);  /* turn all pullups on except for DIO16 which is big button input      */
-	vAHI_DioSetDirection(0x00000000, LED_PIN_BIT);		// Set DIO11 as output (LED)
 #else
 	vAHI_DioSetPullup(0xffffffff, 0x00000000);  /* turn all pullups on      */
 #endif
@@ -195,9 +208,22 @@ PUBLIC void AppColdStart(void)
 
 	bJPT_RadioSetChannel(u8Channel);
 	DBG_vPrintf(TRACE_BEN, "BEN: On doit etre sur le channel: %d\n",u8Channel);
+	DBG_vPrintf(TRACE_BEN, "BEN: Demarrage du Sniff Reseau\n");
 
 	// ****************************************************************************************************
 	while(1){
+
+		// if(bJPT_PacketRx(u8Channel, &sPacket)){
+		while ( bJPT_PacketRx(u8Channel, &sPacket))
+		{
+			if(g_iWSDumpStatus){
+				WS_Dump_Packet(&sPacket);
+				if (logUART) { DBG_vPrintf(TRACE_BEN, "BEN: packet recu sur channel %d et dump en cours alors j envoie l info a wireshark\n",u8Channel); }
+			}
+			else {
+				if (logUART){ DBG_vPrintf(TRACE_BEN, "BEN: packet recu sur channel %d mais dump pas en cours alors je n envoie pas l info a wireshark\n",u8Channel); }
+			}
+		}
 
 		if ((u8Channel != u8Channelsave) && (u8Channelsave != 0)){
 			DBG_vPrintf(TRACE_BEN, "BEN: Changement de channel mais pas de dump en cours donc je n envoie pas l info a wireshark\n");
@@ -205,38 +231,11 @@ PUBLIC void AppColdStart(void)
 
 		if ((u8Channel != u8Channelsave) && g_iWSDumpStatus > 0){
 			DBG_vPrintf(TRACE_BEN, "BEN: Changement de channel j envoie l info a wireshark\n");
+
 			WS_Send_Chan_Num(u8Channel);
 			u8Channelsave = u8Channel;
 		}
 
-		if(bJPT_PacketRx(u8Channel, &sPacket)){
-			if(g_iWSDumpStatus > 0){
-				DBG_vPrintf(TRACE_BEN, "BEN: packet recu sur channel %d et dump en cours alors j envoie l info a wireshark\n",u8Channel);
-				WS_Dump_Packet(&sPacket);
-			}
-			else
-			{
-				DBG_vPrintf(TRACE_BEN, "BEN: packet recu sur channel %d mais dump pas en cours alors je n envoie pas l info a wireshark\n",u8Channel);
-			}
-		}
-
-#ifdef XIAMO_SMART_BUTTON
-		static int t_r = -1;
-		if(t_r!=g_u32Seconds){
-			t_r = g_u32Seconds;
-			if(t_r & 1){
-				vAHI_DioSetOutput(0x00000000, LED_PIN_BIT);		// Set DIO11 (LED)	ON
-			}else{
-				vAHI_DioSetOutput(LED_PIN_BIT, 0x00000000);		// Set DIO11 (LED)	OFF
-			}
-		}
-		if(!(u32AHI_DioReadInput()&MAIN_PIN_BIT)){
-			vPrintf("Main button\n");
-		}
-		if(!(u32AHI_DioReadInput()&PAIR_PIN_BIT)){
-			vPrintf("Pair button\n");
-		}
-#endif
 
 		//AFAC		vPrintf("DIO: %08x\n", u32AHI_DioReadInput());
 
@@ -255,7 +254,12 @@ PUBLIC void AppColdStart(void)
 					acKey=='A' ||
 					acKey=='S' ||
 					acKey=='I' ||
+					acKey=='M' ||
 					acKey=='N' ||
+					acKey=='P' ||
+					acKey=='L' ||
+					acKey=='G' ||
+					acKey=='F' ||
 					acKey=='+' ||
 					acKey=='-'
 			)
@@ -321,6 +325,19 @@ PUBLIC void AppColdStart(void)
 					WS_Send_Test_Packet();
 				}
 
+				// LOG ON LOGON
+				if(bCharBuffer[0]=='L' && bCharBuffer[1]=='O' && bCharBuffer[2]=='G' && bCharBuffer[3]=='O' && bCharBuffer[4]=='N'){
+					DBG_vPrintf(TRACE_BEN, "BEN: LOG ON\n");
+					logUART = 1;
+				}
+
+				// LOG OFF LOGOFF
+				if(bCharBuffer[0]=='L' && bCharBuffer[1]=='O' && bCharBuffer[2]=='G' && bCharBuffer[3]=='O' && bCharBuffer[4]=='F'){
+					DBG_vPrintf(TRACE_BEN, "BEN: LOG OFF\n");
+					logUART = 0;
+				}
+
+
 				// Change Channel
 				if(bCharBuffer[0]=='C' && bCharBuffer[1]==':' && isdigit((uint8_t)bCharBuffer[2]) && isdigit((uint8_t)bCharBuffer[3])){
 					int chan = (bCharBuffer[2] - '0')*10 + bCharBuffer[3] - '0';
@@ -335,11 +352,50 @@ PUBLIC void AppColdStart(void)
 
 				}
 
+				// Chaneg Baud Raye
+				if(bCharBuffer[0]=='S' && bCharBuffer[1]=='P' && bCharBuffer[2]==':' && bCharBuffer[3]=='1' && bCharBuffer[4]=='M')
+				{
+					DBG_vPrintf(TRACE_BEN, "Setting Baud Rate to 1M\n");
+
+					for(n=0;n<100000;n++){}      // wait a bit
+					vAHI_UartSetBaudDivisor(UART_TO_PC, 1);
+					vAHI_UartSetClocksPerBit(UART_TO_PC, 15);
+					for(n=0;n<100000;n++){}      // wait a bit
+
+
+				}
 				iCharBufferPtr = 0;
+
+			}
+
+
+		}
+#ifdef XIAMO_SMART_BUTTON
+
+		static int t_r = -1;
+		if(t_r!=g_u32Seconds){
+			t_r = g_u32Seconds;
+			if(t_r & 1){
+				vAHI_DioSetOutput(0x00000000, LED_PIN_BIT);		// Set DIO11 (LED)	ON
+			}else{
+				vAHI_DioSetOutput(LED_PIN_BIT, 0x00000000);		// Set DIO11 (LED)	OFF
 			}
 		}
+#endif	//def HEARTBEAT_LED
+
+#ifdef XIAOMI_SMART_BUTTON
+		if(!(u32AHI_DioReadInput()&MAIN_PIN_BIT)){
+			vPrintf("Main button\n");
+		}
+		if(!(u32AHI_DioReadInput()&PAIR_PIN_BIT)){
+			vPrintf("Pair button\n");
+		}
+#endif
+
+
 	}
 }
+
 
 PUBLIC void AppWarmStart(void)
 {
@@ -393,7 +449,7 @@ PRIVATE void WS_Send_Chan_Num(uint8_t u8Channel)
 		u32Fraction = u32AHI_TickTimerRead();
 	}while(u32Seconds!=g_u32Seconds);
 	pcap_rec_hdr.ts_sec  = swap32(u32Seconds);
-	pcap_rec_hdr.ts_usec = swap32(u32Fraction*10/16);		// 16 MHz
+	pcap_rec_hdr.ts_usec = swap32(u32Fraction/16);			// 16 MHz
 	dataFrame[lenval++] = 0x07;								// Unknown packet type
 	dataFrame[lenval++] = 0x00;								// Unknown packet type
 	dataFrame[lenval++] = 0x00;								// Sequence number
@@ -413,7 +469,48 @@ PRIVATE void WS_Send_Chan_Num(uint8_t u8Channel)
 		vPutC(((uint8_t*)&dataFrame)[ws_snd_cnt]);
 	}
 }
-
+/*
+PRIVATE void WS_Send_Syntax_Error(const char * pBuffer)
+{
+	pcaprec_hdr_t pcap_rec_hdr = {.ts_sec=0, .ts_usec=0, .incl_len=0, .orig_len=0};
+	char dataFrame[300];
+	int lenval = 0;
+	uint32_t u32Seconds;
+	uint32_t u32Fraction;
+	do{
+		u32Seconds  = g_u32Seconds;
+		u32Fraction = u32AHI_TickTimerRead();
+	}while(u32Seconds!=g_u32Seconds);
+	pcap_rec_hdr.ts_sec  = swap32(u32Seconds);
+	pcap_rec_hdr.ts_usec = swap32(u32Fraction/16);			// 16 MHz
+	dataFrame[lenval++] = 0x07;					// Unknown packet type
+	dataFrame[lenval++] = 0x00;					// Unknown packet type
+	dataFrame[lenval++] = 0x01;					// Sequence number
+	int sptr = 0;
+	if(!(g_iWSDumpStatus > 0)){
+		const char * errstr = "!!!wireshark communication not initialized!!!\n";
+		while(lenval<sizeof(dataFrame)-1){				// -1 for terminating 0
+			if(!errstr[sptr]){break;}
+			dataFrame[lenval++] = errstr[sptr++];
+		}
+	}
+	int bptr = 0;
+	while(lenval<sizeof(dataFrame)-1){				// -1 for terminating 0
+		if(!pBuffer[bptr]){break;}
+		dataFrame[lenval++] = pBuffer[bptr++];
+	}
+	dataFrame[lenval++] = 0;
+	pcap_rec_hdr.incl_len = swap32(lenval);
+	pcap_rec_hdr.orig_len = swap32(lenval);
+	int ws_snd_cnt;
+	for(ws_snd_cnt=0;ws_snd_cnt<sizeof(pcap_rec_hdr);ws_snd_cnt++){
+		vPutC(((uint8_t*)&pcap_rec_hdr)[ws_snd_cnt]);
+	}
+	for(ws_snd_cnt=0;ws_snd_cnt<lenval;ws_snd_cnt++){
+		vPutC(((uint8_t*)&dataFrame)[ws_snd_cnt]);
+	}
+}
+*/
 PRIVATE void WS_Send_Test_Packet(void)
 {
 	uint8_t u8tstFrame[] = {
@@ -428,18 +525,20 @@ PRIVATE void WS_Send_Test_Packet(void)
 	};
 	uint32_t u32Seconds;
 	uint32_t u32Fraction;
+	uint32_t u32Micros;
 	do{
 		u32Seconds  = g_u32Seconds;
 		u32Fraction = u32AHI_TickTimerRead();
 	}while(u32Seconds!=g_u32Seconds);
+	u32Micros = u32Fraction/16;
 	u8tstFrame[0] = ((uint8_t*)&u32Seconds)[3];
 	u8tstFrame[1] = ((uint8_t*)&u32Seconds)[2];
 	u8tstFrame[2] = ((uint8_t*)&u32Seconds)[1];
 	u8tstFrame[3] = ((uint8_t*)&u32Seconds)[0];
-	u8tstFrame[4] = ((uint8_t*)&u32Fraction)[3];
-	u8tstFrame[5] = ((uint8_t*)&u32Fraction)[2];
-	u8tstFrame[6] = ((uint8_t*)&u32Fraction)[1];
-	u8tstFrame[7] = ((uint8_t*)&u32Fraction)[0];
+	u8tstFrame[4] = ((uint8_t*)&u32Micros)[3];
+	u8tstFrame[5] = ((uint8_t*)&u32Micros)[2];
+	u8tstFrame[6] = ((uint8_t*)&u32Micros)[1];
+	u8tstFrame[7] = ((uint8_t*)&u32Micros)[0];
 
 	int ws_snd_cnt;
 	for(ws_snd_cnt=0;ws_snd_cnt<sizeof(u8tstFrame);ws_snd_cnt++){
@@ -449,7 +548,11 @@ PRIVATE void WS_Send_Test_Packet(void)
 
 PRIVATE void WS_Dump_Packet(tsJPT_PT_Packet * psPacket)
 {
-	int FCS			= 0;
+	memcpy ( &psPacketTmp, psPacket, sizeof(psPacketTmp) );
+	psPacket = &psPacketTmp;
+
+
+	// int FCS			= 0;
 	int FCS_Length 	= 0;
 
 	int cnt;
@@ -459,110 +562,122 @@ PRIVATE void WS_Dump_Packet(tsJPT_PT_Packet * psPacket)
 	bool_t bDstExtAddr = FALSE;
 	bool_t bIntraPan = FALSE;
 
-	if ( FCS ){ FCS_Length = 2; }else{ FCS_Length = 0; }
+	// if ( FCS ){ FCS_Length = 2; }else{ FCS_Length = 0; }
 
 	uint32_t u32Seconds;
 	uint32_t u32Fraction;
 	uint32_t u32Micros;
+
 	do{
 		u32Seconds  = g_u32Seconds;
 		u32Fraction = u32AHI_TickTimerRead();
 	}while(u32Seconds!=g_u32Seconds);
-	u32Micros = u32Fraction*10/16;
+	u32Micros = u32Fraction/16;
 
 	/* ========================== Analyze Received Packet ==============================================*/
-	if (psPacket->bPacketGood) {
-
-		//	IEEE 802.15.4 specification Section 5.2.1.1
-		// Bits
-		//	 0- 2: Frame type
-		//			000	Beacon
-		//			001 Data
-		//			010 Acknowledge
-		//			011 MAC command
-		//			1xx Reserved
-		//			111 Used to communicate with Wireshark lua script
-		//	    3: Security Enabled
-		//	    4: Frame Pending
-		//	    5: AR (Acknowledge Request)
-		//	    6: PAN ID Compression
-		//	 7- 9: Reserved
-		//	10-11: Dest. Addressing Mode
-		//
-		//	12-13: Frame version
-		//	14-15: Source Addressing Mode
-
-		if((psPacket->u16FrameControl >> 6) & 1){ bIntraPan = TRUE; }
-
-		/* Source addressing mode */
-		switch((psPacket->u16FrameControl >> 14) & 3){
-
-		/* PAN id and address field not present */
-		case 0:
-			bSrcShortAddr = FALSE;
-			bSrcExtAddr = FALSE;
-			break;
-
-			/* Reserved */
-		case 1:
-			// Je mets short mais je ne sais pas ce que cela doit etre
-			bSrcShortAddr = FALSE;
-			bSrcExtAddr = FALSE;
-			break;
-
-			/* Address field contains a 16 bit short address */
-		case 2:
-			// vPrintf("SSAD=%04x ",psPacket->u16SourceShortAddress);
-			bSrcShortAddr = TRUE;
-			bSrcExtAddr = FALSE;
-			break;
-
-			/* Address field contains a 64 bit extended address */
-		case 3:
-			// vPrintf("SEAD=%016lx ", psPacket->u64SourceExtendedAddress);
-			bSrcShortAddr = FALSE;
-			bSrcExtAddr = TRUE;
-			break;
-		}
-
-		/* Destination addressing mode */
-		switch((psPacket->u16FrameControl & 3 << 10) >> 10){
-
-		/* PAN id and address field not present */
-		case 0:
-			bDstShortAddr = FALSE;
-			bDstExtAddr = FALSE;
-			break;
-
-			/* Reserved */
-		case 1:
-			// Je mets short mais je ne sais pas ce que cela doit etre
-			bDstShortAddr = FALSE;
-			bDstExtAddr = FALSE;
-			break;
-
-			/* Address field contains a 16 bit short address */
-		case 2:
-			// vPrintf("DSAD=%04x ",psPacket->u16DestinationShortAddress);
-			bDstShortAddr = TRUE;
-			bDstExtAddr = FALSE;
-			break;
-
-			/* Address field contains a 64 bit extended address */
-		case 3:
-			// vPrintf("DEAD=%016lx ", psPacket->u64DestinationExtendedAddress);
-			bDstShortAddr = FALSE;
-			bDstExtAddr = TRUE;
-			break;
-
-		}
+	if (!(psPacket->bPacketGood))
+	{
+		DBG_vPrintf(TRACE_BEN, "BEN: Packet Not Good !!!!!!!!!!!\n");
+		return;
 	}
+
+	//	IEEE 802.15.4 specification Section 5.2.1.1
+	// Bits
+	//	 0- 2: Frame type
+	//			000	Beacon
+	//			001 Data
+	//			010 Acknowledge
+	//			011 MAC command
+	//			1xx Reserved
+	//			111 Used to communicate with Wireshark lua script
+	//	    3: Security Enabled
+	//	    4: Frame Pending
+	//	    5: AR (Acknowledge Request)
+	//	    6: PAN ID Compression
+	//	 7- 9: Reserved
+	//	10-11: Dest. Addressing Mode
+	//
+	//	12-13: Frame version
+	//	14-15: Source Addressing Mode
+
+	// Intr PAN
+	if((psPacket->u16FrameControl >> 6) & 1){ bIntraPan = TRUE; }
+
+	/* Source addressing mode */
+	switch((psPacket->u16FrameControl >> 14) & 3)
+	{
+	/* PAN id and address field not present */
+	case 0:
+		bSrcShortAddr = FALSE;
+		bSrcExtAddr = FALSE;
+		break;
+
+		/* Reserved */
+	case 1:
+		// Je mets short mais je ne sais pas ce que cela doit etre
+		bSrcShortAddr = FALSE;
+		bSrcExtAddr = FALSE;
+		break;
+
+		/* Address field contains a 16 bit short address */
+	case 2:
+		// vPrintf("SSAD=%04x ",psPacket->u16SourceShortAddress);
+		bSrcShortAddr = TRUE;
+		bSrcExtAddr = FALSE;
+		break;
+
+		/* Address field contains a 64 bit extended address */
+	case 3:
+		// vPrintf("SEAD=%016lx ", psPacket->u64SourceExtendedAddress);
+		bSrcShortAddr = FALSE;
+		bSrcExtAddr = TRUE;
+		break;
+	}
+
+	/* Destination addressing mode */
+	switch((psPacket->u16FrameControl & 3 << 10) >> 10)
+	{
+
+	/* PAN id and address field not present */
+	case 0:
+		bDstShortAddr = FALSE;
+		bDstExtAddr = FALSE;
+		break;
+
+		/* Reserved */
+	case 1:
+		// Je mets short mais je ne sais pas ce que cela doit etre
+		bDstShortAddr = FALSE;
+		bDstExtAddr = FALSE;
+		break;
+
+		/* Address field contains a 16 bit short address */
+	case 2:
+		// vPrintf("DSAD=%04x ",psPacket->u16DestinationShortAddress);
+		bDstShortAddr = TRUE;
+		bDstExtAddr = FALSE;
+		break;
+
+		/* Address field contains a 64 bit extended address */
+	case 3:
+		// vPrintf("DEAD=%016lx ", psPacket->u64DestinationExtendedAddress);
+		bDstShortAddr = FALSE;
+		bDstExtAddr = TRUE;
+		break;
+	default:
+		DBG_vPrintf(TRACE_BEN, "BEN: Destination Address mode inconnue !!!!!!!!!!!\n");
+		return;
+		break;
+
+	}
+
 
 	/* look at frame type */
 	switch(psPacket->u16FrameControl & 7){
 	/* MAC Beacon Reply -----------------------------------------------------------------------------------------  */
 	case 0:
-		if ( (psPacket->u8PayloadLength!=0) && (psPacket->bPacketGood) ) {
+		if ( psPacket->u8PayloadLength!=0 ) {
+
 			vPutC(((uint8_t*)&u32Seconds)[3]);vPutC(((uint8_t*)&u32Seconds)[2]);vPutC(((uint8_t*)&u32Seconds)[1]);vPutC(((uint8_t*)&u32Seconds)[0]);
 			vPutC(((uint8_t*)&u32Micros)[3]); vPutC(((uint8_t*)&u32Micros)[2]); vPutC(((uint8_t*)&u32Micros)[1]); vPutC(((uint8_t*)&u32Micros)[0]);
 			vPutC( psPacket->u8PayloadLength + 7 + FCS_Length ); vPutC(0); vPutC(0); vPutC(0);
@@ -581,20 +696,22 @@ PRIVATE void WS_Dump_Packet(tsJPT_PT_Packet * psPacket)
 				vPutC( psPacket->u8Payload[cnt] );
 			}
 			// FCS
-			if (FCS) { vPutC(0xAA); vPutC(0xAA); }
+			// if (FCS) { vPutC(0xAA); vPutC(0xAA); }
 		}else {
 			// Will need to inform Wireshark that a packet has been received but not forwarded.
+			DBG_vPrintf(TRACE_BEN, "BEN: Case 0 not processed\n");
 		}
 		break;
-		/* MAC Data -------------------------------------------------------------------------------------------------- */
-	case 1:
-		if ( (psPacket->u8PayloadLength!=0) && (psPacket->bPacketGood) ) {
+	/* MAC Data -------------------------------------------------------------------------------------------------- */
+	case 1:;
+		if ( psPacket->u8PayloadLength!=0 ) {
 			vPutC(((uint8_t*)&u32Seconds)[3]);vPutC(((uint8_t*)&u32Seconds)[2]);vPutC(((uint8_t*)&u32Seconds)[1]);vPutC(((uint8_t*)&u32Seconds)[0]);
 			vPutC(((uint8_t*)&u32Micros)[3]); vPutC(((uint8_t*)&u32Micros)[2]); vPutC(((uint8_t*)&u32Micros)[1]); vPutC(((uint8_t*)&u32Micros)[0]);
 			vPutC( psPacket->u8PayloadLength + 9 + FCS_Length ); vPutC(0); vPutC(0); vPutC(0);
 			vPutC( psPacket->u8PayloadLength + 9 + FCS_Length ); vPutC(0); vPutC(0); vPutC(0);
 			// MAC
 			// FrameControl
+
 			vPutC(psPacket->u16FrameControl&0xFF); vPutC(psPacket->u16FrameControl>>8);
 			// SequenceNumber
 			vPutC(psPacket->u8SequenceNumber);
@@ -604,6 +721,16 @@ PRIVATE void WS_Dump_Packet(tsJPT_PT_Packet * psPacket)
 				// Destination Short Address
 				vPutC(psPacket->u16DestinationShortAddress&0xFF); vPutC(psPacket->u16DestinationShortAddress>>8);
 			}
+			if ( bDstExtAddr ) {
+			// Destination Long Address
+				uint8 *data = (uint8 *)&(psPacket->u64DestinationExtendedAddress);
+				vPutC(data[7]); vPutC(data[6]); vPutC(data[5]); vPutC(data[4]); vPutC(data[3]); vPutC(data[2]); vPutC(data[1]); vPutC(data[0]);
+			}
+		// Source Pan ID
+			if ( (bIntraPan==0) && (bSrcExtAddr || bSrcShortAddr) ) {
+				vPutC(psPacket->u16SourcePanID&0xFF); vPutC(psPacket->u16SourcePanID>>8);
+			}
+		// Source Address
 			if(bSrcShortAddr){
 				// Source Short Address
 				vPutC(psPacket->u16SourceShortAddress&0xFF); vPutC(psPacket->u16SourceShortAddress>>8);
@@ -613,14 +740,16 @@ PRIVATE void WS_Dump_Packet(tsJPT_PT_Packet * psPacket)
 				vPutC( psPacket->u8Payload[cnt] );
 			}
 			// FCS
-			if (FCS) { vPutC(0xAA); vPutC(0xAA); }
+			// if (FCS) { vPutC(0xAA); vPutC(0xAA); }
 		}else {
 			// Will need to inform Wireshark that a packet has been received but not forwarded.
+			DBG_vPrintf(TRACE_BEN, "BEN: Case 1 not processed\n");
 		}
 		break;
-		/* Ack  ------------------------------------------------------------------------------------------------------ */
+
+	/* Ack  ------------------------------------------------------------------------------------------------------ */
 	case 2:
-		if ( (psPacket->u8PayloadLength==0) && (psPacket->bPacketGood) ) {
+		if ( psPacket->u8PayloadLength==0 ) {
 			vPutC(((uint8_t*)&u32Seconds)[3]);vPutC(((uint8_t*)&u32Seconds)[2]);vPutC(((uint8_t*)&u32Seconds)[1]);vPutC(((uint8_t*)&u32Seconds)[0]);
 			vPutC(((uint8_t*)&u32Micros)[3]); vPutC(((uint8_t*)&u32Micros)[2]); vPutC(((uint8_t*)&u32Micros)[1]); vPutC(((uint8_t*)&u32Micros)[0]);
 			vPutC( psPacket->u8PayloadLength + 3 + FCS_Length ); vPutC(0); vPutC(0); vPutC(0);
@@ -631,17 +760,19 @@ PRIVATE void WS_Dump_Packet(tsJPT_PT_Packet * psPacket)
 			// SequenceNumber
 			vPutC(psPacket->u8SequenceNumber);
 			// FCS
-			if (FCS) { vPutC(0xAA); vPutC(0xAA); }
+			// if (FCS) { vPutC(0xAA); vPutC(0xAA); }
 		}else {
 			// Will need to inform Wireshark that a packet has been received but not forwarded.
+			DBG_vPrintf(TRACE_BEN, "BEN: Case 2 not processed\n");
 		}
 		break;
-		/* MAC Command  ---------------------------------------------------------------------------------------------- */
-		/* Beacon Request */
-		/* Association Request */
-		/* Association Response */
+
+	/* MAC Command  ---------------------------------------------------------------------------------------------- */
+	/* Beacon Request */
+	/* Association Request */
+	/* Association Response */
 	case 3:
-		if ( (psPacket->u8PayloadLength!=0) && (psPacket->bPacketGood) ) {
+		if ( psPacket->u8PayloadLength!=0 ) {
 			vPutC(((uint8_t*)&u32Seconds)[3]);vPutC(((uint8_t*)&u32Seconds)[2]);vPutC(((uint8_t*)&u32Seconds)[1]);vPutC(((uint8_t*)&u32Seconds)[0]);
 			vPutC(((uint8_t*)&u32Micros)[3]); vPutC(((uint8_t*)&u32Micros)[2]); vPutC(((uint8_t*)&u32Micros)[1]); vPutC(((uint8_t*)&u32Micros)[0]);
 			vPutC( psPacket->u8PayloadLength + 2+1+2 + 2*bSrcShortAddr + 8*bSrcExtAddr + 2*(1-bIntraPan)*bSrcExtAddr + 2*bDstShortAddr + 8*bDstExtAddr + FCS_Length ); vPutC(0); vPutC(0); vPutC(0);
@@ -667,7 +798,8 @@ PRIVATE void WS_Dump_Packet(tsJPT_PT_Packet * psPacket)
 			}
 			// Source  Address
 			if ( bSrcShortAddr ) {
-				vPutC(psPacket->u16SourceShortAddress&0xFF); vPutC(psPacket->u16SourceShortAddress>>8); }
+				vPutC(psPacket->u16SourceShortAddress&0xFF); vPutC(psPacket->u16SourceShortAddress>>8);
+			}
 			if ( bSrcExtAddr ) {
 				uint8 *data = (uint8 *)&(psPacket->u64SourceExtendedAddress);
 				vPutC(data[7]); vPutC(data[6]); vPutC(data[5]); vPutC(data[4]); vPutC(data[3]); vPutC(data[2]); vPutC(data[1]); vPutC(data[0]);
@@ -677,14 +809,16 @@ PRIVATE void WS_Dump_Packet(tsJPT_PT_Packet * psPacket)
 				vPutC( psPacket->u8Payload[cnt] );
 			}
 			// FCS
-			if (FCS) { vPutC(0xAA); vPutC(0xAA); }
+			// if (FCS) { vPutC(0xAA); vPutC(0xAA); }
 		}else {
 			// Will need to inform Wireshark that a packet has been received but not forwarded.
+			DBG_vPrintf(TRACE_BEN, "BEN: Case 3 not processed\n");
 		}
 		break;
 		/* Reserved  ------------------------------------------------------------------------------------------------  */
 	default:
 		// Will need to inform Wireshark that an unsupported packet has been received but not forwarded.
+		DBG_vPrintf(TRACE_BEN, "BEN: Case default not processed\n");
 		break;
 	}
 }
