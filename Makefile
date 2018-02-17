@@ -21,7 +21,7 @@ JENNIC_STACK ?= None
 # Define which UART to use for debug
 #DEBUG_PORT ?= UART0
 
-DEBUG ?= UART1
+#DEBUG ?= UART1
 
 ifeq ($(DEBUG), UART1)
 $(info Building with debug UART1...)
