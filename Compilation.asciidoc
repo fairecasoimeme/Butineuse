@@ -33,7 +33,13 @@ le sdk doir être dans le répertoire: C:\NXP\bstudio_nxp\sdk
 
 image::images/2018090705.png[]
 
-Dans le menu Proect->Properties->C/C++ Build->Build command, mettre ->make JENNIC_CHIP=JN5168 JENNIC_CHIP_FAMILY=JN516x  -j8<-
+Dans le menu Project->Properties->C/C++ Build->Build command, mettre 
+
+[source,]
+----
+make JENNIC_CHIP=JN5168 JENNIC_CHIP_FAMILY=JN516x -j8
+----
+
 
 Sélectionnez le projet Butineuse et lancez la compilation avec le marteau et le sous menu "Default"
 
