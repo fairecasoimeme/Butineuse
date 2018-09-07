@@ -1,6 +1,4 @@
-= Work in progress
-
-== KiwiHC16 Version
+= Compilation - KiwiHC16 Version
 
 Récupérez les sources manuellement (Ou utilisez GitHup Desktop)
 [source,]
@@ -60,7 +58,7 @@ image::images/2018090711.png[]
 débranchez le module, le rebranché et il doit être prêt pour la collect des messages.
 
 
-== Jerome-PS evolution
+= Jerome-PS evolution (Work in progress)
 
 git clone xxxx JN516xSniffer
 
