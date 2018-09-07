@@ -1,6 +1,66 @@
 = Work in progress
 
-Jerome-PS evolution
+== KiwiHC16 Version
+
+Récupérez les sources manuellement (Ou utilisez GitHup Desktop)
+[source,]
+----
+cd C:\NXP\bstudio_nxp\workspace
+git clone https://github.com/KiwiHC16/Butineuse.git Butineuse
+----
+
+Lancez NXP Studio
+
+Creez un nouveau projet
+
+image::images/2018090701.png[]
+
+Selectionnez le répertoire de Butineuse
+
+image::images/2018090702.png[]
+
+Slectionnez la toolchain
+
+image::images/2018090703.png[]
+
+Vous devez avoir le projet Butineuse dans la liste
+
+image::images/2018090704.png[]
+
+Si vous n'avez pas le sdk 4163 installé, alors téléchargez le fichier, decompressez et lancez le exe:
+
+image::images/2018090706.png[]
+
+le sdk doir être dans le répertoire: C:\NXP\bstudio_nxp\sdk
+
+image::images/2018090705.png[]
+
+Sélectionnez le projet Butineuse et lancez la compilation avec le marteau et le sous menu "Default"
+
+image::images/2018090707.png[]
+
+Dans mon cas la compilation est déjà à jour donc rien n'à faire de plus.
+
+image::images/2018090708.png[]
+
+Passons à la programmation du module JN5168, menu Devices->Program device:
+
+Branchez le module JN5168 en maintenant la PIN 3 à la masse à la mise sous tension.
+
+image::images/2018090709.png[]
+
+Séléctionnez le bin compilé précedement:
+
+image::images/2018090710.png[]
+
+et le bouton programmer
+
+image::images/2018090711.png[]
+
+débranchez le module, le rebranché et il doit être prêt pour la collect des messages.
+
+
+== Jerome-PS evolution
 
 git clone xxxx JN516xSniffer
 
