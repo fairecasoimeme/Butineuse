@@ -33,6 +33,14 @@ le sdk doir être dans le répertoire: C:\NXP\bstudio_nxp\sdk
 
 image::images/2018090705.png[]
 
+Dans le menu Project->Properties->C/C++ Build->Build command, mettre 
+
+[source,]
+----
+make JENNIC_CHIP=JN5168 JENNIC_CHIP_FAMILY=JN516x -j8
+----
+
+
 Sélectionnez le projet Butineuse et lancez la compilation avec le marteau et le sous menu "Default"
 
 image::images/2018090707.png[]
@@ -57,25 +65,8 @@ image::images/2018090711.png[]
 
 débranchez le module, le rebranché et il doit être prêt pour la collect des messages.
 
+== Astuce
 
-= Jerome-PS evolution (Work in progress)
-
-git clone xxxx JN516xSniffer
-
-start NXP Studio
-
-Create a generique project
-
-Modify makfile
-# Default device type
-JENNIC_CHIP ?= JN5168
-
-#TOOL_COMMON_BASE_DIR= /usr/local
-TOOL_COMMON_BASE_DIR= C:\NXP\bstudio_nxp\sdk\Tools
-
-create make
-
-compilation
-
+Pour demarrer sur un canal specifique:
 
 Dans le firmware: #define STARTUP_CHANNEL			20
