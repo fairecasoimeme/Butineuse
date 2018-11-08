@@ -1,0 +1,103 @@
+= Module Wifi
+
+Avoir un module autonome sur batterie que l'on peut placer ou l'on veut pour sniffer le traffic.
+
+Grace a=
+
+* esp-link la magie peut opérer: https://github.com/jeelabs/esp-link
+* adafruit Huzzaah Feather ESP8266
+
+== ESP-Link sur adafruit Fuzzah ESP8266
+
+=== Installation du soft
+
+Depuis une debían suivre les instruction de la page: https://github.com/jeelabs/esp-link/blob/master/FLASHING.md
+
+Utilisateur root: Chapitre Installing esptool.py on Linux pour un 32Mbit / 4Mbyte module
+
+==== Installer esptool.py
+
+_Install ez_setup with the following two commands (I believe this will do something reasonable if you already have it):_
+
+----
+wget https://bootstrap.pypa.io/ez_setup.py
+python ez_setup.py
+----
+
+_Install esptool.py:_
+
+[source,]
+----
+ git clone https://github.com/themadinventor/esptool.git
+ cd esptool
+ python setup.py install
+ cd ..
+----
+
+==== Installation de esp-link
+
+Récupérer le soft en mettant la version voulue:
+
+[source,]
+----
+curl -L https://github.com/jeelabs/esp-link/releases/download/v2.2.3/esp-link-v2.2.3.tgz | \
+    tar xzf -
+----
+
+Téléchargement dans le module esp8266
+
+Bien mettre les nom de fichiers associés à la version choisie et remplacer -fs 32 par -fs 4MB
+
+[source,]
+----
+cd esp-link-v2.2.3
+esptool.py --port /dev/ttyUSB0 --baud 230400 write_flash -fs 32m -ff 80m \
+    0x00000 boot_v1.5.bin 0x1000 user1.bin \
+    0x3FC000 esp_init_data_default.bin 0x3FE000 blank.bin
+----
+
+Le module doit redémarrer et offrir un AP, se connecter http://192.168.4.1
+
+Passer en mode AP+STA pour trouvé les réseau wifi disponible, se connecter au réseau wifi spécifique que vous souhaitez.
+
+En fonction de votre configuration réseau, vous devrier retrouver le module wifi sur celui ci.
+
+Vous pouvez vous y connecter en http pour faire la configuration.
+
+
+== Connection module Wifi et JN5168/Sniffer
+
++3V <-> +3V
+TX<->RX
+RX<->TX
+Gnd<->Gnd
+
+== Sniff
+
+=== Connection
+
+La premiere chose a faire est de créer une connection entre le module wifi et la machine sur laquelle tournera wireshark:
+
+Depuis la machine saisir la commande (mettre l adresse IP du module Wifi):
+[source,]
+----
+socat pty,rawer,echo=0,link=/tmp/sniff tcp:192.168.4.102:23
+----
+
+Petite astuces, si vous voulez calibrer le temps dans wireshark, faites la commande suivante pour avoir l'heure de debut et l heure de fin:
+
+[source,]
+----
+date; socat pty,rawer,echo=0,link=/tmp/sniff tcp:192.168.4.102:23; date
+----
+
+Il ne reste plus qu lancer le sniff:
+
+[source,]
+----
+python3 ./Sniff.py /tmp/sniff
+----
+
+
+
+
