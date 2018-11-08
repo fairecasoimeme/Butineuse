@@ -94,7 +94,7 @@ def main(argv):
 			print("# Cannot proceed #")
 			print("##################")
 			raise e
-		
+
 	wiresharkPath = None
 	if(args.wireshark and not args.no_wireshark):
 		if(args.wireshark != '#@search'):
@@ -130,9 +130,9 @@ def main(argv):
 				print('\tTry: sudo usermod -a -G dialout $USER')
 				print("~~~~~~~~~~~~~~~~~~")
 		raise e
-		
-	ser.rts = 0	# nRESET when wired
-	ser.dtr = 0	# nPROG  when wired
+
+#	ser.rts = 0	# nRESET when wired
+#	ser.dtr = 0	# nPROG  when wired
 	print("Using serial port '%s' at %d Baud" % (ser.name, ser.baudrate))         # check which port was really used
 
 	if(bIsWindows):
@@ -204,7 +204,7 @@ def main(argv):
 class FIFOClosedException(Exception):
 	def __init__(self, *args, **kwds):
 		Exception.__init__(self, *args, **kwds)
-	
+
 
 class PyFIFO():
 	def __init__(self, path, mode, *args, **kwds):
@@ -309,7 +309,7 @@ class PyFIFO():
 			import pywintypes, win32file
 			data = 0
 			try:
-				(hr, data) = win32file.ReadFile(self.fileobject,1) 
+				(hr, data) = win32file.ReadFile(self.fileobject,1)
 			except pywintypes.error as e:
 				import winerror
 				if(e.winerror==winerror.ERROR_BROKEN_PIPE):
@@ -340,7 +340,7 @@ class PyFIFO():
 	def write(self, data):
 		if(self.bIsWindows):
 			import win32file
-			win32file.WriteFile(self.fileobject, data) 
+			win32file.WriteFile(self.fileobject, data)
 		elif(self.bIsPosix):
 			if(not self.bIsOpen):
 				self.open()
@@ -352,7 +352,7 @@ class PyFIFO():
 				except BrokenPipeError as e:
 					self.deletepipe()
 					raise FIFOClosedException()
-	
+
 	def deletepipe(self):
 		self.bIsOpen    = False
 		self.delfifo()
@@ -361,4 +361,3 @@ class PyFIFO():
 # Using the main trick
 import sys
 main(sys.argv)
-
