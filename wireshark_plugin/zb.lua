@@ -103,6 +103,7 @@ do
 --		dprint("[0:2]=" .. buf(0,2):uint())
 		set_color_filter_slot(4, "zbee_zcl")				-- Purple 2
 		set_color_filter_slot(7, "zbee_nwk.cmd.id == 0x08")		-- Green  3 - Link Status
+        set_color_filter_slot(1, "zbee_aps.profile == 0x0000")        -- Green  3 - Bind
 		if (buf:len() < 2) or (buf(0,2):uint() ~= 0x0700) then
 			orig104:call(buf,pkt,root)
 		else
@@ -116,6 +117,7 @@ do
 
 		set_color_filter_slot(4, "zbee_zcl")				-- Purple 2
 		set_color_filter_slot(7, "zbee_nwk.cmd.id == 0x08")		-- Green  3 - Link Status
+        set_color_filter_slot(1, "zbee_aps.profile == 0x0000")        -- Green  3 - Bind
 		if (buf:len() < 2) or (buf(0,2):uint() ~= 0x0700) then
 			orig127:call(buf,pkt,root)
 		else
